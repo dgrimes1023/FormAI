@@ -24,4 +24,7 @@ async def upload_video(file: UploadFile = File(...)):
     # 4. LLM feedback (dummy for MVP)
     feedback = generate_feedback(pose_data)
 
-    return {"feedback": feedback}
+    return {
+        "feedback": feedback,
+        "pose_data": pose_data
+    }
