@@ -117,7 +117,7 @@ export default function VideoUploader() {
             onMouseEnter={(e) => !isGeneratingFeedback && (e.target.style.transform = 'scale(1.05)')}
             onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
           >
-            {isGeneratingFeedback ? '⏳ Generating...' : 'Generate Feedback'}
+            {isGeneratingFeedback ? 'Generating...' : 'Generate Feedback'}
           </button>
           {poseData && (
             <button 
