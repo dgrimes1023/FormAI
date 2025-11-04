@@ -9,7 +9,7 @@ A simple MVP for AI-powered form feedback using video uploads.
 
 ## How to Run
 
-### Using Docker (Recommended) ⭐
+### Using Docker (Recommended) 
 Run both frontend and backend with a single command:
 ```bash
 docker-compose up --build
