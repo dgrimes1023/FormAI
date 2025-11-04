@@ -3,6 +3,7 @@ uvicorn
 opencv-python
 python-dotenv
 python-multipart
-opencv-python 
 mediapipe
 numpy
+scipy
+requests

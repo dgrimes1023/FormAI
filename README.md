@@ -8,12 +8,36 @@ A simple MVP for AI-powered form feedback using video uploads.
 - Pose analysis and feedback generation
 
 ## How to Run
+
+### Using Docker (Recommended) ⭐
+Run both frontend and backend with a single command:
+```bash
+docker-compose up --build
+```
+
+Or use the startup script:
+```bash
+./start-docker.sh
+```
+
+**Services:**
+- Frontend: `http://localhost:3000`
+- Backend API: `http://localhost:8001`
+
+To stop:
+```bash
+docker-compose down
+```
+
+See [DOCKER.md](DOCKER.md) for more Docker commands and troubleshooting.
+
+### Manual Setup
 1. Install backend dependencies:
    ```bash
    cd backend
    pip install -r requirements.txt
    ```
-2. Start backend API:
+2. Start backend API (port 8001):
    ```bash
    python3 -m app.main
    ```
@@ -32,6 +56,8 @@ A simple MVP for AI-powered form feedback using video uploads.
 - `frontend/` — Next.js frontend
 
 ## Requirements
-- Python 3.10+
-- Node.js 18+
-- See `backend/requirements.txt` and `frontend/package.json` for details
+- Docker and Docker Compose (for containerized setup)
+- **OR** for manual setup:
+  - Python 3.10+
+  - Node.js 18+
+  - See `backend/requirements.txt` and `frontend/package.json` for details
