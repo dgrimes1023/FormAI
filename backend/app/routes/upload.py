@@ -1,3 +1,11 @@
+"""
+LEGACY ROUTE - Kept for backwards compatibility
+This file contains the original upload and feedback endpoints.
+New code should use the exercise-specific routes:
+- /squat/upload and /squat/generate-feedback (see routes/squat.py)
+- /benchpress/upload and /benchpress/generate-feedback (see routes/benchpress.py)
+"""
+
 from fastapi import APIRouter, UploadFile, File
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -6,11 +14,6 @@ from app.utils.video_processing import extract_frames
 from app.utils.pose_analysis import analyze_pose
 from app.utils.rep_counter import count_reps
 import requests
-# TODO: Implement these modules
-# from app.utils.pose_preprocessing import preprocess_pose_data
-# from app.utils.rep_segmentation import segment_squat_reps
-# from app.utils.biomechanics import analyze_squat_biomechanics
-# from app.llm_feedback import generate_feedback
 
 router = APIRouter()
 

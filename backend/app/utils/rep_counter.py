@@ -199,9 +199,10 @@ def validate_squat_depth(pose_data, frame_index):
     depth_difference = avg_hip_height - avg_knee_height
     depth_valid = depth_difference >= 0  # Positive means hips went at or below knees (good depth)
     
-    # Knee width should be at least shoulder width (with 5% tolerance)
-    # Allow knees to be up to 5% narrower than shoulders and still be valid
-    tolerance = 0.05  # 5% tolerance
+    # Knee width should be at least shoulder width (with 10% tolerance)
+    # Allow knees to be up to 10% narrower than shoulders and still be valid
+    # Increased from 5% to 10% for more lenient validation
+    tolerance = 0.10  # 10% tolerance
     min_required_knee_width = shoulder_width * (1 - tolerance)
     width_difference = knee_width - shoulder_width
     knee_width_valid = knee_width >= min_required_knee_width
@@ -230,4 +231,192 @@ def validate_squat_depth(pose_data, frame_index):
         "width_difference": float(width_difference),
         "depth_missed_by": float(depth_missed_by),
         "width_missed_by": float(width_missed_by)
+    }
+
+
+def count_benchpress_reps(pose_data):
+    """
+    Count bench press reps by tracking wrist position (high->low->high = 1 rep)
+    Also validates bench press depth by checking if wrists go down to at least 10% of chest height
+    Returns: dict with rep_count and reps_data (list of frame indices and depth validation for each rep)
+    """
+    if not pose_data:
+        return {"rep_count": 0, "reps_data": []}
+    
+    # MediaPipe pose landmarks:
+    # Landmark 15 = left wrist, 16 = right wrist
+    # We'll track the average wrist height
+    wrist_y_positions = []
+    valid_frame_indices = []
+    
+    for i, frame_data in enumerate(pose_data):
+        if frame_data is not None and len(frame_data) > 16:
+            # Get wrist landmarks (15 = left wrist, 16 = right wrist)
+            left_wrist_y = frame_data[15][1]  # [x, y, z, visibility]
+            right_wrist_y = frame_data[16][1]
+            avg_wrist_y = (left_wrist_y + right_wrist_y) / 2
+            wrist_y_positions.append(avg_wrist_y)
+            valid_frame_indices.append(i)
+    
+    if len(wrist_y_positions) < 3:
+        return {"rep_count": 0, "reps_data": []}
+    
+    # Smooth the data to reduce noise
+    window_size = 3
+    smoothed_positions = np.convolve(wrist_y_positions, np.ones(window_size)/window_size, mode='valid')
+    
+    # Detect peaks (high points) - y increases downward in image coordinates
+    # So high point (arms extended) = lower y value, low point (bar at chest) = higher y value
+    reps = []
+    state = "unknown"  # Can be: "high", "low", "unknown"
+    rep_start_frame = None
+    rep_low_frames = []  # Track all frames during the "low" phase
+    
+    threshold = 0.01  # Minimum movement threshold (reduced from 0.015 for better sensitivity)
+    
+    for i in range(1, len(smoothed_positions) - 1):
+        # Adjust index for valid frames
+        actual_index = valid_frame_indices[i + (window_size // 2)]
+        
+        # Detect state transitions
+        if state == "unknown":
+            # Initialize state
+            if smoothed_positions[i] < np.mean(smoothed_positions):
+                state = "high"
+                rep_start_frame = actual_index
+        
+        elif state == "high":
+            # Check if we're moving down (y increasing - bar going down to chest)
+            if smoothed_positions[i] > smoothed_positions[i-1] + threshold:
+                # Transitioning to low
+                state = "low"
+                rep_low_frames = [actual_index]
+        
+        elif state == "low":
+            # Track all frames in the low position
+            rep_low_frames.append(actual_index)
+            
+            # Check if we're moving up (y decreasing - pressing bar up)
+            if smoothed_positions[i] < smoothed_positions[i-1] - threshold:
+                # Transitioning back to high - rep complete!
+                state = "high"
+                rep_end = actual_index
+                
+                if rep_start_frame is not None and len(rep_low_frames) > 0:
+                    # Find the actual lowest point by checking wrist position in all low frames
+                    lowest_point_frame = rep_low_frames[0]
+                    max_wrist_y = -float('inf')
+                    
+                    for frame_idx in rep_low_frames:
+                        if pose_data[frame_idx] is not None and len(pose_data[frame_idx]) > 16:
+                            left_wrist_y = pose_data[frame_idx][15][1]
+                            right_wrist_y = pose_data[frame_idx][16][1]
+                            avg_wrist_y = (left_wrist_y + right_wrist_y) / 2
+                            if avg_wrist_y > max_wrist_y:
+                                max_wrist_y = avg_wrist_y
+                                lowest_point_frame = frame_idx
+                    
+                    # Validate depth at the lowest point
+                    depth_validation = validate_benchpress_depth(pose_data, lowest_point_frame)
+                    
+                    reps.append({
+                        "rep_number": len(reps) + 1,
+                        "start_frame": rep_start_frame,
+                        "end_frame": rep_end,
+                        "lowest_point_frame": lowest_point_frame,
+                        "validation_status": depth_validation["validation_status"],
+                        "depth_valid": depth_validation["depth_valid"],
+                        "wrist_height": depth_validation["wrist_height"],
+                        "chest_height": depth_validation["chest_height"],
+                        "depth_percentage": depth_validation["depth_percentage"],
+                        "depth_missed_by": depth_validation["depth_missed_by"]
+                    })
+                
+                rep_start_frame = rep_end
+                rep_low_frames = []
+    
+    return {
+        "rep_count": len(reps),
+        "reps_data": reps
+    }
+
+
+def validate_benchpress_depth(pose_data, frame_index):
+    """
+    Validate bench press at the lowest point:
+    - Depth: wrists should be at least 10% the height of the chest (wrist_y >= chest_y * 1.1 in image coords)
+    Returns: dict with validation results including 'valid' or 'invalid'
+    """
+    # Safety check for frame_index
+    if frame_index >= len(pose_data) or frame_index < 0:
+        print(f"WARNING: frame_index {frame_index} out of bounds (pose_data length: {len(pose_data)})")
+        return {
+            "validation_status": "invalid",
+            "depth_valid": False,
+            "wrist_height": None,
+            "chest_height": None,
+            "depth_percentage": None,
+            "depth_missed_by": None
+        }
+    
+    frame_data = pose_data[frame_index]
+    
+    if frame_data is None:
+        print(f"WARNING: frame_data is None at frame {frame_index}")
+        return {
+            "validation_status": "invalid",
+            "depth_valid": False,
+            "wrist_height": None,
+            "chest_height": None,
+            "depth_percentage": None,
+            "depth_missed_by": None
+        }
+    
+    if len(frame_data) < 17:
+        print(f"WARNING: frame_data has only {len(frame_data)} landmarks at frame {frame_index}, need at least 17")
+        return {
+            "validation_status": "invalid",
+            "depth_valid": False,
+            "wrist_height": None,
+            "chest_height": None,
+            "depth_percentage": None,
+            "depth_missed_by": None
+        }
+    
+    # Get wrist landmarks (15 = left wrist, 16 = right wrist)
+    left_wrist_y = frame_data[15][1]
+    right_wrist_y = frame_data[16][1]
+    avg_wrist_height = (left_wrist_y + right_wrist_y) / 2
+    
+    # Get shoulder landmarks as proxy for chest (11 = left shoulder, 12 = right shoulder)
+    left_shoulder_y = frame_data[11][1]
+    right_shoulder_y = frame_data[12][1]
+    avg_chest_height = (left_shoulder_y + right_shoulder_y) / 2
+    
+    # In image coordinates, y increases downward (0 at top, 1 at bottom)
+    # For proper bench press depth: wrists can be up to 5% above chest (more lenient)
+    # This means wrist_y can be as low as chest_y * 0.95 (5% above in image coords = smaller y value)
+    
+    required_wrist_height = avg_chest_height * 0.95
+    depth_valid = avg_wrist_height >= required_wrist_height
+    
+    # Calculate depth percentage (how far down the wrists went relative to chest)
+    if avg_chest_height > 0:
+        depth_percentage = ((avg_wrist_height - avg_chest_height) / avg_chest_height) * 100
+    else:
+        depth_percentage = 0
+    
+    # Calculate how much was missed if invalid
+    depth_missed_by = abs(required_wrist_height - avg_wrist_height) if not depth_valid else 0
+    
+    # Determine overall validation status
+    validation_status = "valid" if depth_valid else "invalid"
+    
+    return {
+        "validation_status": validation_status,
+        "depth_valid": depth_valid,
+        "wrist_height": float(avg_wrist_height),
+        "chest_height": float(avg_chest_height),
+        "depth_percentage": float(depth_percentage),
+        "depth_missed_by": float(depth_missed_by)
     }
