@@ -35,7 +35,7 @@ AI-powered exercise form analysis using computer vision and large language model
   ```
 - **For ApiFree (Cloud AI)**: No installation required, select ApiFree from the Model dropdown on the homepage
 
-### Using Docker (Recommended) ⭐
+### Using Docker (Recommended)
 Run both frontend and backend with a single command:
 ```bash
 docker-compose up --build

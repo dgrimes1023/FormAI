@@ -1,5 +1,14 @@
 # Checkpoint 1: FormAI
 
+## How it works:
+1. User uploads a video
+2. Body keypoints data and metrics extracted
+3. Computations to analyze relative angles
+4. Sends the results to LLM, good reps, bad reps, didnt hit depth, knees caving, etc
+5. Here is a picture demo of how the results are returned and sent to LLM. 
+<img width="733" height="924" alt="image" src="https://github.com/user-attachments/assets/a6ec49f9-64db-405b-8361-cf9d39245f24" />
+
+
 ### Demo 1: Perfect Form Squats
 
 **Input Data (sent to LLM):**
